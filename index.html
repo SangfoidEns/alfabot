@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Humans 2.0 — Analytics Engine</title>
+  <title>Humans 2.0 — Production Analytics Engine</title>
   
-  <!-- Tailwind CSS -->
+  <!-- Tailwind CSS & Chart.js CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <script>
@@ -31,33 +30,12 @@
   </script>
   
   <style>
-    body {
-      background-color: #0B0D14;
-      color: #E2E8F0;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #0F121C;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #1A2133;
-      border-radius: 3px;
-    }
-    .hm-cell {
-      transition: all 0.15s ease;
-    }
-    .hm-cell:hover {
-      transform: scale(1.15);
-      z-index: 10;
-    }
-    .hm-current-time {
-      outline: 2px solid #00E5FF;
-      outline-offset: 1px;
-    }
+    body { background-color: #0B0D14; color: #E2E8F0; font-family: system-ui, -apple-system, sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #0F121C; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #1A2133; border-radius: 3px; }
+    .hm-cell { transition: all 0.15s ease; cursor: pointer; }
+    .hm-cell:hover { transform: scale(1.2); z-index: 10; }
   </style>
 </head>
 <body class="p-4 md:p-6 lg:p-8 min-h-screen custom-scrollbar">
@@ -70,77 +48,57 @@
         <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-neonBlue via-neonGreen to-neonYellow">
           HUMANS 2.0 ANALYTICS
         </h1>
-        <p class="text-xs text-gray-400">Система обліку, аналітики угод та закупки сортів</p>
+        <p class="text-xs text-gray-400">Автономний аналітичний двигун з розрахунком закупки та Heatmap</p>
       </div>
       <div class="flex items-center gap-3">
-        <div id="liveClock" class="font-mono text-xs text-neonBlue bg-brandCard px-3 py-1.5 rounded-lg border border-brandBorder">
-          --:--:--
-        </div>
-        <button id="btnLoadSample" class="text-xs bg-brandCard hover:bg-brandBorder text-gray-300 px-3 py-1.5 rounded-lg border border-brandBorder transition">
-          Приклад
-        </button>
-        <button id="btnClearAll" class="text-xs bg-neonRed/10 hover:bg-neonRed/20 text-neonRed px-3 py-1.5 rounded-lg border border-neonRed/30 transition">
-          Очистити
-        </button>
+        <div id="liveClock" class="font-mono text-xs text-neonBlue bg-brandCard px-3 py-1.5 rounded-lg border border-brandBorder">--:--:--</div>
+        <button id="btnLoadSample" class="text-xs bg-brandCard hover:bg-brandBorder text-gray-300 px-3 py-1.5 rounded-lg border border-brandBorder transition">Приклад</button>
+        <button id="btnClearAll" class="text-xs bg-neonRed/10 hover:bg-neonRed/20 text-neonRed px-3 py-1.5 rounded-lg border border-neonRed/30 transition">Очистити</button>
       </div>
     </header>
 
-    <!-- TOP ROW: RAW INPUT & PROCUREMENT SETTINGS -->
+    <!-- INPUT & SETTINGS -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <!-- LOG INPUT FORM -->
+      <!-- LOG INPUT -->
       <div class="lg:col-span-2 bg-brandCard p-4 rounded-2xl border border-brandBorder flex flex-col">
         <div class="flex justify-between items-center mb-2">
-          <label for="rawInput" class="text-xs font-bold text-gray-300 uppercase tracking-wider">
-            Вхідні Логи
-          </label>
+          <label for="rawInput" class="text-xs font-bold text-gray-300 uppercase tracking-wider">Вхідні Логи</label>
           <span class="text-[10px] text-gray-500">Автопарсинг угод</span>
         </div>
-        <textarea id="rawInput" class="w-full flex-1 bg-brandDark border border-brandBorder rounded-xl p-3 text-xs font-mono text-gray-200 focus:outline-none focus:border-neonBlue transition resize-none min-h-[160px] custom-scrollbar" placeholder="Вставте логи сюди..."></textarea>
-        <button id="btnProcessData" class="mt-3 w-full bg-gradient-to-r from-neonBlue to-neonGreen text-black font-bold text-xs py-2.5 rounded-xl hover:opacity-90 transition">
-          ОБРОБИТИ ДАНІ
-        </button>
+        <textarea id="rawInput" class="w-full flex-1 bg-brandDark border border-brandBorder rounded-xl p-3 text-xs font-mono text-gray-200 focus:outline-none focus:border-neonBlue transition resize-none min-h-[160px] custom-scrollbar" placeholder="Вставити логи сюди..."></textarea>
+        <button id="btnProcessData" class="mt-3 w-full bg-gradient-to-r from-neonBlue to-neonGreen text-black font-bold text-xs py-2.5 rounded-xl hover:opacity-90 transition">ОБРОБИТИ ДАНІ</button>
       </div>
 
-      <!-- PROCUREMENT SETTINGS & "MY EXPENSES" -->
+      <!-- PROCUREMENT & MY EXPENSES -->
       <div class="space-y-6">
-        
-        <!-- Закупівля сортів -->
+        <!-- Закупівля -->
         <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder">
           <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Закупівля сортів (€ / 100г)</h3>
-          
-          <div id="procurementList" class="space-y-2 mb-3 max-h-36 overflow-y-auto custom-scrollbar">
-            <!-- Динамічно заповнюється з JS -->
-          </div>
-
+          <div id="procurementList" class="space-y-2 mb-3 max-h-36 overflow-y-auto custom-scrollbar"></div>
           <div class="flex gap-2">
-            <input id="newProcurementName" type="text" placeholder="Сорт (AMNESIA)" class="flex-1 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white uppercase focus:outline-none focus:border-neonBlue" />
-            <input id="newProcurementCost" type="number" placeholder="€ / 100г" class="w-24 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none focus:border-neonBlue" />
+            <input id="newProcurementName" type="text" placeholder="Сорт" class="flex-1 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white uppercase focus:outline-none" />
+            <input id="newProcurementCost" type="number" placeholder="€/100г" class="w-24 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none" />
             <button id="btnAddProcurement" class="bg-neonBlue text-black font-bold text-xs px-3 py-2 rounded-lg hover:opacity-90 transition">+</button>
           </div>
         </div>
 
-        <!-- Мої Витрати / Доходи -->
+        <!-- Мої (Баланс) -->
         <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder">
           <div class="flex justify-between items-center mb-3">
             <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider">Мої (Баланс)</h3>
             <span id="myTotalDisplay" class="font-mono text-xs font-bold text-neonYellow">0.00 €</span>
           </div>
-          
-          <div id="myExpensesList" class="space-y-1.5 mb-3 max-h-28 overflow-y-auto custom-scrollbar">
-            <!-- Динамічний список -->
-          </div>
-
+          <div id="myExpensesList" class="space-y-1.5 mb-3 max-h-28 overflow-y-auto custom-scrollbar"></div>
           <div class="space-y-2">
-            <input id="myExpenseNote" type="text" placeholder="Опис моїх витрат/доходу" class="w-full bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none focus:border-neonBlue" />
+            <input id="myExpenseNote" type="text" placeholder="Опис" class="w-full bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none" />
             <div class="flex gap-2">
-              <input id="myExpenseAmount" type="number" placeholder="Сума (€)" class="flex-1 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none focus:border-neonBlue" />
-              <button id="btnAddIncome" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-500/30 transition">+ Дохід</button>
-              <button id="btnAddExpense" class="bg-red-500/20 text-red-400 border border-red-500/40 font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-red-500/30 transition">- Витрата</button>
+              <input id="myExpenseAmount" type="number" placeholder="Сума (€)" class="flex-1 bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white focus:outline-none" />
+              <button id="btnAddIncome" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold text-xs px-2.5 py-1.5 rounded-lg hover:bg-emerald-500/30 transition">+ Дохід</button>
+              <button id="btnAddExpense" class="bg-red-500/20 text-red-400 border border-red-500/40 font-bold text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-500/30 transition">- Витрата</button>
             </div>
           </div>
         </div>
-
       </div>
     </div>
 
@@ -168,30 +126,17 @@
       </div>
     </div>
 
-    <!-- CATEGORIES SUMMARY -->
-    <div id="categorySummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <!-- Динамічні картки сортів -->
-    </div>
+    <!-- CATEGORY SUMMARY CARDS -->
+    <div id="categorySummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
     <!-- HEATMAP SECTION -->
     <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider">Теплова Карта Активності</h2>
-          <span id="heatmapPeriodText" class="text-xs font-mono text-neonBlue bg-brandDark px-2 py-0.5 rounded border border-brandBorder"></span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button id="btnPrevWeek" class="bg-brandDark hover:bg-brandBorder text-xs text-gray-300 px-2.5 py-1 rounded border border-brandBorder">←</button>
-          <button id="btnTodayWeek" class="bg-brandDark hover:bg-brandBorder text-xs text-gray-300 px-2.5 py-1 rounded border border-brandBorder">Поточний тиждень</button>
-          <button id="btnNextWeek" class="bg-brandDark hover:bg-brandBorder text-xs text-gray-300 px-2.5 py-1 rounded border border-brandBorder">→</button>
-          <input type="date" id="heatmapDatePicker" class="bg-brandDark text-xs text-gray-300 p-1 rounded border border-brandBorder" />
-        </div>
+        <h2 class="text-sm font-bold text-gray-200 uppercase tracking-wider">Теплова Карта Активності (24/7)</h2>
+        <div class="text-xs font-mono text-neonBlue" id="heatmapTotalDeals">Всього угод: 0</div>
       </div>
-
-      <!-- HEATMAP GRID -->
       <div class="overflow-x-auto custom-scrollbar">
         <div class="min-w-[700px] space-y-1">
-          <!-- Hours Header -->
           <div class="grid grid-cols-[60px_repeat(24,1fr)] gap-1 text-[9px] font-mono text-gray-500 text-center pb-1 border-b border-brandBorder/40">
             <div>День</div>
             <div>00</div><div>01</div><div>02</div><div>03</div><div>04</div><div>05</div>
@@ -199,35 +144,26 @@
             <div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div>
             <div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div>
           </div>
-          <!-- Grid Rows -->
           <div id="heatmapGridRows" class="space-y-1"></div>
         </div>
       </div>
     </div>
 
-    <!-- CHARTS SECTION -->
+    <!-- CHARTS -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder">
-        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Об'єм продажів за сортами (Точна вага, г)</h3>
-        <div class="h-56 relative">
-          <canvas id="weightBarChart"></canvas>
-        </div>
+        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Вага за сортами (г)</h3>
+        <div class="h-56 relative"><canvas id="weightBarChart"></canvas></div>
       </div>
       <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder">
-        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Частка виручки за сортами (€)</h3>
-        <div class="h-56 relative">
-          <canvas id="revenuePieChart"></canvas>
-        </div>
+        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Виручка за сортами (€)</h3>
+        <div class="h-56 relative"><canvas id="revenuePieChart"></canvas></div>
       </div>
     </div>
 
-    <!-- RECORDS TABLE -->
+    <!-- TABLE -->
     <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder space-y-3">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider">Деталізована Таблиця Угод</h3>
-        <input id="tableSearch" type="text" placeholder="Пошук клієнта або сорту..." class="bg-brandDark text-xs p-2 rounded-lg border border-brandBorder text-white w-full sm:w-64 focus:outline-none focus:border-neonBlue" />
-      </div>
-
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider">Реєстр Угод</h3>
       <div class="overflow-x-auto custom-scrollbar">
         <table class="w-full text-left border-collapse min-w-[600px]">
           <thead>
@@ -235,22 +171,381 @@
               <th class="p-3">Сорт</th>
               <th class="p-3">Клієнт</th>
               <th class="p-3">Базова вага</th>
-              <th class="p-3">Точна вага (+10%)</th>
-              <th class="p-3">Отримано (Факт)</th>
-              <th class="p-3">Примітки (Борг/Карта/Бонус)</th>
-              <th class="p-3">Дата / Час</th>
+              <th class="p-3">Точна вага</th>
+              <th class="p-3">Факт (€)</th>
+              <th class="p-3">Деталі</th>
+              <th class="p-3">Час</th>
             </tr>
           </thead>
-          <tbody id="recordsTableBody" class="divide-y divide-brandBorder/40 text-xs font-mono">
-            <!-- Динамічний рендер з JS -->
-          </tbody>
+          <tbody id="recordsTableBody" class="divide-y divide-brandBorder/40 text-xs font-mono"></tbody>
         </table>
       </div>
     </div>
 
   </div>
 
-  <!-- MODULE SCRIPTS -->
-  <script type="module" src="js/app.js"></script>
+  <!-- CORE SCRIPT (ZERO-DEPENDENCY RUN) -->
+  <script>
+    // --- 1. STATE MANAGEMENT ---
+    const state = {
+      procurementCosts: JSON.parse(localStorage.getItem('h2_procurement_costs')) || { 'BANNAN': 600, 'SKITTLES': 660 },
+      myExpenses: JSON.parse(localStorage.getItem('h2_my_expenses')) || [],
+      parsedRecords: [],
+      barChart: null,
+      pieChart: null
+    };
+
+    function saveState() {
+      localStorage.setItem('h2_procurement_costs', JSON.stringify(state.procurementCosts));
+      localStorage.setItem('h2_my_expenses', JSON.stringify(state.myExpenses));
+    }
+
+    // --- 2. ROBUST PARSER ENGINE ---
+    function parseWeight(str) {
+      let weight = 0, bonusWeight = 0;
+      if (!str) return { weight, bonusWeight };
+      const tokens = str.toLowerCase().replace(',', '.').split(/\s+/);
+      tokens.forEach(t => {
+        if (t.includes('бонус') || t.includes('bonus')) {
+          const n = parseFloat(t.replace(/[^0-9.]/g, ''));
+          if (!isNaN(n)) bonusWeight += n;
+        } else {
+          const matches = t.match(/\d*\.?\d+/g);
+          if (matches) matches.forEach(m => { const n = parseFloat(m); if (!isNaN(n)) weight += n; });
+        }
+      });
+      return { weight, bonusWeight };
+    }
+
+    function parseMoney(str, bonusWeightGram = 0) {
+      let eurPaid = 0, debtNew = 0, debtRepaid = 0, bonus = 0, card = 0;
+      if (!str) return { eurPaid, debtNew, debtRepaid, bonus, card, rawText: '' };
+      const clean = str.toLowerCase().replace(',', '.').trim();
+
+      if (bonusWeightGram > 0) bonus += bonusWeightGram * 10;
+
+      clean.split(/\s+/).forEach(t => {
+        if (t.includes('долг') || t.includes('борг')) {
+          const n = parseFloat(t.replace(/[^0-9.]/g, ''));
+          if (!isNaN(n)) { if (t.includes('-')) debtNew += n; else debtRepaid += n; }
+        } else if (t.includes('бонус') || t.includes('bonus')) {
+          const n = parseFloat(t.replace(/[^0-9.]/g, ''));
+          if (!isNaN(n)) bonus += n;
+        } else if (t.includes('карт') || t.includes('card')) {
+          const n = parseFloat(t.replace(/[^0-9.]/g, ''));
+          if (!isNaN(n)) card += n;
+        } else {
+          const matches = t.match(/[-+]?\d*\.?\d+/g);
+          if (matches) matches.forEach(m => { const n = parseFloat(m); if (!isNaN(n)) eurPaid += n; });
+        }
+      });
+
+      // Карта мінусує фактичну готівку, Бонус НЕ мінусує!
+      const actualEURPaid = card > 0 ? Math.max(0, eurPaid - card) : eurPaid;
+      return { eurPaid: actualEURPaid, debtNew, debtRepaid, bonus, card, rawText: clean };
+    }
+
+    function parseLogs(rawText) {
+      if (!rawText) return [];
+      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+      let currentCategory = 'UNCATEGORIZED';
+      const records = [];
+      const TECH = ['name', 'gramm', '€', 'time'];
+
+      let i = 0;
+      while (i < lines.length) {
+        if (i + 3 < lines.length && lines[i+1].toLowerCase() === 'name' && lines[i+2].toLowerCase() === 'gramm' && lines[i+3] === '€') {
+          currentCategory = lines[i].toUpperCase();
+          i += 4;
+          continue;
+        }
+        if (TECH.includes(lines[i].toLowerCase())) { i++; continue; }
+
+        if (i + 3 < lines.length) {
+          const clientName = lines[i];
+          const rawGramm = lines[i+1];
+          const rawMoney = lines[i+2];
+          const timeStr = lines[i+3];
+
+          if (timeStr.includes('.') || timeStr.includes(':')) {
+            const w = parseWeight(rawGramm);
+            const m = parseMoney(rawMoney, w.bonusWeight);
+            const baseGramm = w.weight;
+            const exactGramm = baseGramm * 1.1;
+
+            // Парсинг часу для Heatmap
+            let hour = 12, dayOfWeek = 0;
+            if (timeStr.includes(':')) {
+              hour = parseInt(timeStr.split(':')[0], 10) || 0;
+            }
+
+            records.push({
+              category: currentCategory,
+              clientName,
+              baseGramm,
+              exactGramm,
+              eurPaid: m.eurPaid,
+              debtNew: m.debtNew,
+              debtRepaid: m.debtRepaid,
+              bonus: m.bonus,
+              card: m.card,
+              rawDebtText: m.rawText,
+              timeStr,
+              hour,
+              dayOfWeek: new Date().getDay() // Спрощено для поточного тижня
+            });
+            i += 4;
+            continue;
+          }
+        }
+        i++;
+      }
+      return records;
+    }
+
+    // --- 3. PROCESS & RENDER ENGINE ---
+    function processData() {
+      const rawText = document.getElementById('rawInput').value;
+      localStorage.setItem('h2_raw_logs', rawText);
+
+      state.parsedRecords = parseLogs(rawText);
+      const autoExpenses = [];
+      const categories = {};
+
+      let totalEURPaid = 0, totalBaseWeight = 0, totalExactWeight = 0;
+
+      state.parsedRecords.forEach(r => {
+        totalEURPaid += r.eurPaid;
+        totalBaseWeight += r.baseGramm;
+        totalExactWeight += r.exactGramm;
+
+        if (r.bonus > 0) {
+          autoExpenses.push({ id: 'b_'+Math.random(), note: `Бонус: ${r.clientName} (${r.category})`, amount: -r.bonus, isBonus: true, time: r.timeStr });
+        }
+        if (r.card > 0) {
+          autoExpenses.push({ id: 'c_'+Math.random(), note: `Карта: ${r.clientName} (${r.category})`, amount: r.card, isAutoCard: true, time: r.timeStr });
+        }
+
+        if (!categories[r.category]) {
+          categories[r.category] = { deals: 0, baseGramm: 0, exactGramm: 0, eurPaid: 0, costOfGoods: 0, netProfit: 0 };
+        }
+        categories[r.category].deals++;
+        categories[r.category].baseGramm += r.baseGramm;
+        categories[r.category].exactGramm += r.exactGramm;
+        categories[r.category].eurPaid += r.eurPaid;
+      });
+
+      let totalCostOfGoods = 0, totalNetProfit = 0;
+
+      Object.keys(categories).forEach(cat => {
+        const c = categories[cat];
+        const costPer100g = state.procurementCosts[cat] || 0;
+        // Математично точна собівартість:
+        c.costOfGoods = (c.exactGramm / 100) * costPer100g;
+        c.netProfit = c.eurPaid - c.costOfGoods;
+        totalCostOfGoods += c.costOfGoods;
+        totalNetProfit += c.netProfit;
+      });
+
+      // KPI Update
+      document.getElementById('kpiRevenue').innerText = `${totalEURPaid.toFixed(2)} €`;
+      document.getElementById('kpiNetProfit').innerText = `${totalNetProfit.toFixed(2)} €`;
+      document.getElementById('kpiCostOfGoods').innerText = `${totalCostOfGoods.toFixed(2)} €`;
+      document.getElementById('kpiBaseWeight').innerText = `${totalBaseWeight.toFixed(2)} г`;
+      document.getElementById('kpiExactWeight').innerText = `${totalExactWeight.toFixed(2)} г`;
+
+      renderProcurementUI();
+      renderMyExpensesUI(autoExpenses);
+      renderCategoryCards(categories);
+      renderHeatmap(state.parsedRecords);
+      renderTable(state.parsedRecords);
+      renderCharts(categories);
+    }
+
+    // --- 4. UI RENDERERS ---
+    function renderProcurementUI() {
+      const container = document.getElementById('procurementList');
+      container.innerHTML = Object.keys(state.procurementCosts).map(cat => `
+        <div class="flex items-center justify-between bg-brandDark/50 p-2 rounded border border-brandBorder">
+          <span class="font-bold text-xs font-mono text-neonBlue">${cat}</span>
+          <div class="flex items-center gap-2">
+            <input type="number" value="${state.procurementCosts[cat]}" data-cat="${cat}" class="input-p-cost w-20 bg-brandCard text-right text-xs p-1 rounded border border-brandBorder text-white font-mono" />
+            <button data-cat="${cat}" class="btn-del-p text-red-400 font-bold px-1">×</button>
+          </div>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.input-p-cost').forEach(i => {
+        i.addEventListener('change', e => {
+          state.procurementCosts[e.target.dataset.cat] = parseFloat(e.target.value) || 0;
+          saveState(); processData();
+        });
+      });
+      container.querySelectorAll('.btn-del-p').forEach(b => {
+        b.addEventListener('click', e => {
+          delete state.procurementCosts[e.target.dataset.cat];
+          saveState(); processData();
+        });
+      });
+    }
+
+    function renderMyExpensesUI(autoExpenses) {
+      const combined = [...state.myExpenses, ...autoExpenses];
+      let total = 0;
+      combined.forEach(i => { if (!i.isBonus) total += i.amount; });
+
+      document.getElementById('myTotalDisplay').innerText = `${total.toFixed(2)} €`;
+      const container = document.getElementById('myExpensesList');
+      if (combined.length === 0) { container.innerHTML = '<p class="text-gray-500 text-[11px]">Порожньо</p>'; return; }
+
+      container.innerHTML = combined.slice().reverse().map(i => `
+        <div class="flex justify-between items-center bg-brandDark/60 p-1.5 rounded border ${i.isBonus ? 'border-amber-500/40' : i.isAutoCard ? 'border-neonBlue/40' : 'border-brandBorder'} text-xs">
+          <span class="truncate text-gray-300">${i.note}</span>
+          <span class="font-bold ${i.amount >= 0 ? 'text-neonGreen' : 'text-neonRed'}">${i.amount > 0 ? '+' : ''}${i.amount} €</span>
+        </div>
+      `).join('');
+    }
+
+    function renderCategoryCards(categories) {
+      const container = document.getElementById('categorySummaryCards');
+      container.innerHTML = Object.keys(categories).map(cat => {
+        const c = categories[cat];
+        return `
+          <div class="bg-brandCard p-4 rounded-2xl border border-brandBorder">
+            <div class="flex justify-between items-center mb-2">
+              <span class="px-2 py-0.5 bg-neonBlue/10 text-neonBlue border border-neonBlue/30 rounded font-mono font-bold text-xs">${cat}</span>
+              <span class="text-xs text-gray-400 font-mono">${c.deals} угод</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div><p class="text-[10px] text-gray-500">Факт</p><p class="text-white font-bold">${c.eurPaid.toFixed(2)} €</p></div>
+              <div><p class="text-[10px] text-gray-500">Прибуток</p><p class="text-neonGreen font-bold">${c.netProfit.toFixed(2)} €</p></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderHeatmap(records) {
+      const container = document.getElementById('heatmapGridRows');
+      document.getElementById('heatmapTotalDeals').innerText = `Всього угод: ${records.length}`;
+      
+      const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+      const grid = Array(7).fill(0).map(() => Array(24).fill(0));
+
+      records.forEach(r => {
+        const d = r.dayOfWeek === 0 ? 6 : r.dayOfWeek - 1;
+        grid[d][r.hour]++;
+      });
+
+      container.innerHTML = days.map((day, dIdx) => `
+        <div class="grid grid-cols-[60px_repeat(24,1fr)] gap-1 items-center">
+          <div class="text-[10px] font-mono text-gray-400">${day}</div>
+          ${grid[dIdx].map(count => {
+            let bg = 'bg-brandDark';
+            if (count > 0 && count <= 2) bg = 'bg-neonBlue/30 border border-neonBlue/50';
+            else if (count > 2 && count <= 5) bg = 'bg-neonYellow/50 border border-neonYellow';
+            else if (count > 5) bg = 'bg-neonGreen text-black font-bold';
+            return `<div class="h-6 rounded ${bg} flex items-center justify-center text-[9px] font-mono hm-cell">${count > 0 ? count : ''}</div>`;
+          }).join('')}
+        </div>
+      `).join('');
+    }
+
+    function renderTable(records) {
+      const tbody = document.getElementById('recordsTableBody');
+      if (records.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-500">Немає даних</td></tr>'; return; }
+      tbody.innerHTML = records.map(r => `
+        <tr class="hover:bg-brandDark/40 transition">
+          <td class="p-3 font-bold text-neonBlue">${r.category}</td>
+          <td class="p-3 text-gray-200">${r.clientName}</td>
+          <td class="p-3 text-gray-400">${r.baseGramm.toFixed(2)} г</td>
+          <td class="p-3 text-neonYellow font-bold">${r.exactGramm.toFixed(2)} г</td>
+          <td class="p-3 text-white font-bold">${r.eurPaid.toFixed(2)} €</td>
+          <td class="p-3 text-gray-400 text-[11px]">${r.rawDebtText || '-'}</td>
+          <td class="p-3 text-gray-500 text-[11px]">${r.timeStr}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderCharts(categories) {
+      const labels = Object.keys(categories);
+      const weights = labels.map(k => categories[k].exactGramm);
+      const revenues = labels.map(k => categories[k].eurPaid);
+
+      if (state.barChart) state.barChart.destroy();
+      if (state.pieChart) state.pieChart.destroy();
+
+      const ctxBar = document.getElementById('weightBarChart').getContext('2d');
+      state.barChart = new Chart(ctxBar, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Грами', data: weights, backgroundColor: '#00E5FF80', borderColor: '#00E5FF', borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+
+      const ctxPie = document.getElementById('revenuePieChart').getContext('2d');
+      state.pieChart = new Chart(ctxPie, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: revenues, backgroundColor: ['#00E5FF', '#00FF88', '#FFD700', '#FF3366', '#9D00FF'] }] },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    // --- 5. INITIALIZATION & EVENTS ---
+    document.addEventListener('DOMContentLoaded', () => {
+      // Clock
+      setInterval(() => {
+        document.getElementById('liveClock').innerText = new Date().toLocaleTimeString();
+      }, 1000);
+
+      // Buttons
+      document.getElementById('btnProcessData').addEventListener('click', processData);
+      
+      document.getElementById('btnAddProcurement').addEventListener('click', () => {
+        const name = document.getElementById('newProcurementName').value.trim().toUpperCase();
+        const cost = parseFloat(document.getElementById('newProcurementCost').value);
+        if (name && !isNaN(cost)) {
+          state.procurementCosts[name] = cost;
+          saveState(); processData();
+          document.getElementById('newProcurementName').value = '';
+          document.getElementById('newProcurementCost').value = '';
+        }
+      });
+
+      document.getElementById('btnAddIncome').addEventListener('click', () => {
+        const note = document.getElementById('myExpenseNote').value.trim();
+        const amount = parseFloat(document.getElementById('myExpenseAmount').value);
+        if (note && !isNaN(amount)) {
+          state.myExpenses.push({ id: Date.now(), note, amount: Math.abs(amount) });
+          saveState(); processData();
+        }
+      });
+
+      document.getElementById('btnAddExpense').addEventListener('click', () => {
+        const note = document.getElementById('myExpenseNote').value.trim();
+        const amount = parseFloat(document.getElementById('myExpenseAmount').value);
+        if (note && !isNaN(amount)) {
+          state.myExpenses.push({ id: Date.now(), note, amount: -Math.abs(amount) });
+          saveState(); processData();
+        }
+      });
+
+      document.getElementById('btnLoadSample').addEventListener('click', () => {
+        document.getElementById('rawInput').value = `BANNAN\nname\ngramm\n€\ntime\nAlex\n100 бонус 10\n600 карта 200\n14:30 20.08.2026\nMax\n50\n300 долг -50\n16:15 20.08.2026`;
+        processData();
+      });
+
+      document.getElementById('btnClearAll').addEventListener('click', () => {
+        document.getElementById('rawInput').value = '';
+        state.myExpenses = [];
+        saveState(); processData();
+      });
+
+      // Restore raw input
+      const savedRaw = localStorage.getItem('h2_raw_logs');
+      if (savedRaw) document.getElementById('rawInput').value = savedRaw;
+
+      processData();
+    });
+  </script>
 </body>
 </html>
