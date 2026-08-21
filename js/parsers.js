@@ -1,12 +1,74 @@
 /**
- * Log Parsing Engine
+ * Advanced Parsing Engine using Context Detection
  */
-export function parseWeightAndBonus(str) {
-  if (!str) return { weight: 0, bonusWeight: 0 };
-  const clean = str.toString().toLowerCase().replace(',', '.').trim();
-  let weight = 0, bonusWeight = 0;
+export function parseLogs(rawText) {
+  if (!rawText || typeof rawText !== 'string') return [];
 
-  clean.split(/\s+/).forEach(token => {
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  let currentCategory = 'UNCATEGORIZED';
+  const records = [];
+
+  const TECH_HEADERS = new Set(['name', 'gramm', '€', 'time', 'цена', 'сумма']);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Детекція Категорії (наприклад, "BANNAN" перед блоком "name / gramm / €")
+    if (i + 1 < lines.length && TECH_HEADERS.has(lines[i + 1].toLowerCase())) {
+      currentCategory = line.toUpperCase();
+      continue;
+    }
+
+    if (TECH_HEADERS.has(line.toLowerCase())) {
+      continue;
+    }
+
+    // Спроба розпарсити блок угоди з 4 елементів (Client, Gramm, Money, Time)
+    if (i + 3 < lines.length) {
+      const clientName = lines[i];
+      const rawGramm = lines[i + 1];
+      const rawMoney = lines[i + 2];
+      const timeStr = lines[i + 3];
+
+      // Валідація за форматом часу (XX.XX або XX:XX)
+      if (/(\d{1,2}[\.:]\d{1,2})/.test(timeStr)) {
+        const weightData = parseWeight(rawGramm);
+        const moneyData = parseMoney(rawMoney, weightData.bonusWeight);
+
+        const baseGramm = weightData.weight;
+        const exactGramm = baseGramm * 1.1; // +10% точна вага
+
+        records.push({
+          id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          category: currentCategory,
+          clientName,
+          rawGramm,
+          baseGramm,
+          exactGramm,
+          eurPaid: moneyData.eurPaid, // Вже враховує списання карти з готівки
+          debtNew: moneyData.debtNew,
+          debtRepaid: moneyData.debtRepaid,
+          bonus: moneyData.bonus,
+          card: moneyData.card,
+          rawDebtText: moneyData.rawText,
+          timeStr,
+          parsedDate: parseDate(timeStr)
+        });
+
+        i += 3; // Пропускаємо оброблені 4 рядки
+      }
+    }
+  }
+
+  return records;
+}
+
+function parseWeight(str) {
+  let weight = 0;
+  let bonusWeight = 0;
+  const tokens = str.toLowerCase().replace(',', '.').split(/\s+/);
+
+  tokens.forEach(token => {
     if (token.includes('бонус') || token.includes('bonus')) {
       const num = parseFloat(token.replace(/[^0-9.]/g, ''));
       if (!isNaN(num)) bonusWeight += num;
@@ -24,21 +86,21 @@ export function parseWeightAndBonus(str) {
   return { weight, bonusWeight };
 }
 
-export function parseMoneyDebtBonusCard(str, bonusWeightFromGram = 0) {
-  if (!str) return { eurPaid: 0, debtNew: 0, debtRepaid: 0, bonus: 0, card: 0, rawText: '' };
-  const clean = str.toString().toLowerCase().replace(',', '.').trim();
+function parseMoney(str, bonusWeightFromGram = 0) {
   let eurPaid = 0, debtNew = 0, debtRepaid = 0, bonus = 0, card = 0;
+  const clean = str.toLowerCase().replace(',', '.').trim();
 
+  // 1г бонусу = 10€ еквівалент для інформативного блоку
   if (bonusWeightFromGram > 0) {
-    bonus += bonusWeightFromGram * 10; // Інформативний еквівалент бонусу
+    bonus += bonusWeightFromGram * 10;
   }
 
-  clean.split(/\s+/).forEach(token => {
+  const tokens = clean.split(/\s+/);
+  tokens.forEach(token => {
     if (token.includes('долг') || token.includes('борг')) {
-      const hasMinus = token.includes('-');
       const num = parseFloat(token.replace(/[^0-9.]/g, ''));
       if (!isNaN(num)) {
-        if (hasMinus) debtNew += num;
+        if (token.includes('-')) debtNew += num;
         else debtRepaid += num;
       }
     } else if (token.includes('бонус') || token.includes('bonus')) {
@@ -46,105 +108,36 @@ export function parseMoneyDebtBonusCard(str, bonusWeightFromGram = 0) {
       if (!isNaN(num)) bonus += num;
     } else if (token.includes('карт') || token.includes('card')) {
       const num = parseFloat(token.replace(/[^0-9.]/g, ''));
-      card += !isNaN(num) ? num : eurPaid;
+      if (!isNaN(num)) card += num;
     } else {
-      const matches = token.match(/[-+]?\d*\.?\d+/g);
-      if (matches) {
-        matches.forEach(m => {
-          const val = parseFloat(m);
-          if (!isNaN(val) && !token.includes('долг')) eurPaid += val;
-        });
-      }
+      const num = parseFloat(token.replace(/[^0-9.]/g, ''));
+      if (!isNaN(num)) eurPaid += num;
     }
   });
 
-  // Карта мінусує факт готівки, АЛЕ БОНУС НЕ МІНУСУЄ ГРОШІ!
-  let actualEURPaid = eurPaid;
-  if (card > 0) {
-    actualEURPaid = card <= eurPaid ? eurPaid - card : 0;
-  }
+  // Логіка: Карта зменшує факт отриманої готівки (eurPaid)
+  const actualEURPaid = Math.max(0, eurPaid - card);
 
   return { eurPaid: actualEURPaid, debtNew, debtRepaid, bonus, card, rawText: clean };
 }
 
-export function parseRecordDateTime(timeStr) {
+function parseDate(timeStr) {
   const now = new Date();
-  let year = now.getFullYear(), month = now.getMonth(), day = now.getDate(), hour = 12, minute = 0;
+  let day = now.getDate(), month = now.getMonth(), year = now.getFullYear();
+  let hours = 12, minutes = 0;
 
-  timeStr.trim().split(/\s+/).forEach(p => {
+  const parts = timeStr.split(/\s+/);
+  parts.forEach(p => {
     if (p.includes(':')) {
-      const hm = p.split(':');
-      hour = parseInt(hm[0], 10) || 0;
-      minute = parseInt(hm[1], 10) || 0;
+      const [h, m] = p.split(':').map(Number);
+      hours = h || 0; minutes = m || 0;
     } else if (p.includes('.')) {
-      const dmp = p.split('.');
-      if (dmp[0]) day = parseInt(dmp[0], 10);
-      if (dmp[1]) month = parseInt(dmp[1], 10) - 1;
-      if (dmp[2]) year = parseInt(dmp[2], 10);
-      if (year < 100) year += 2000;
+      const [d, m, y] = p.split('.').map(Number);
+      if (d) day = d;
+      if (m) month = m - 1;
+      if (y) year = y < 100 ? 2000 + y : y;
     }
   });
 
-  return new Date(year, month, day, hour, minute);
-}
-
-export function parseLogs(rawText) {
-  if (!rawText) return [];
-  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l !== '');
-  let currentCategory = 'UNCATEGORIZED';
-  const records = [];
-  const techHeaders = ['name', 'gramm', '€', 'time'];
-
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (i + 3 < lines.length && 
-        lines[i+1].toLowerCase() === 'name' && 
-        lines[i+2].toLowerCase() === 'gramm' && 
-        lines[i+3] === '€') {
-      currentCategory = line.toUpperCase();
-      i += 5;
-      continue;
-    }
-
-    if (techHeaders.includes(line.toLowerCase())) { i++; continue; }
-
-    if (i + 3 < lines.length) {
-      const clientName = lines[i];
-      const rawGramm = lines[i+1];
-      const rawMoney = lines[i+2];
-      const timeStr = lines[i+3];
-
-      if (timeStr.includes('.') || timeStr.includes(':')) {
-        const weightData = parseWeightAndBonus(rawGramm);
-        const moneyData = parseMoneyDebtBonusCard(rawMoney, weightData.bonusWeight);
-        
-        const baseGramm = weightData.weight;
-        const exactGramm = baseGramm * 1.1;
-
-        records.push({
-          category: currentCategory,
-          clientName,
-          rawGramm,
-          baseGramm,
-          exactGramm,
-          rawMoney,
-          eurPaid: moneyData.eurPaid,
-          debtNew: moneyData.debtNew,
-          debtRepaid: moneyData.debtRepaid,
-          bonus: moneyData.bonus,
-          card: moneyData.card,
-          rawDebtText: moneyData.rawText,
-          timeStr,
-          parsedDateObj: parseRecordDateTime(timeStr)
-        });
-
-        i += 4;
-        continue;
-      }
-    }
-    i++;
-  }
-  return records;
+  return new Date(year, month, day, hours, minutes);
 }
