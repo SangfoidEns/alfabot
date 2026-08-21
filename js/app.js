@@ -1,5 +1,7 @@
 /**
- * Humans 2.0 Engine - Core Application Logic (Bonus & Card Support)
+ * Humans 2.0 Engine - Full Core Application Logic
+ * Supports Bonus Parsing (from weight & money), Card Parsing, Debt Tracking, 
+ * Expenses/Income Management, Dynamic Heatmap & Chart Visualizations.
  */
 
 (() => {
@@ -23,7 +25,7 @@
   let barChart = null;
   let pieChart = null;
   let myExpenses = [];
-  let autoMyExpensesFromLogs = []; // Автоматичні записи з Бонусів та Карт
+  let autoMyExpensesFromLogs = [];
   let parsedRecordsGlobal = [];
   let selectedWeekStart = getMonday(new Date());
   const categoryColorMap = {};
@@ -64,18 +66,33 @@
   }
 
   // --- PARSERS ---
-  function parseWeight(str) {
-    if (!str) return 0;
-    const clean = str.toString().toLowerCase().replace(',', '.');
-    const matches = clean.match(/\d*\.?\d+/g);
-    if (!matches) return 0;
-    return matches.reduce((acc, curr) => acc + parseFloat(curr), 0);
+  function parseWeightAndBonus(str) {
+    if (!str) return { weight: 0, bonusWeight: 0 };
+    const clean = str.toString().toLowerCase().replace(',', '.').trim();
+    
+    let weight = 0;
+    let bonusWeight = 0;
+
+    const tokens = clean.split(/\s+/);
+    tokens.forEach(token => {
+      if (token.includes('бонус') || token.includes('bonus')) {
+        const num = parseFloat(token.replace(/[^0-9.]/g, ''));
+        if (!isNaN(num)) bonusWeight += num;
+      } else {
+        const matches = token.match(/\d*\.?\d+/g);
+        if (matches) {
+          matches.forEach(m => {
+            const val = parseFloat(m);
+            if (!isNaN(val)) weight += val;
+          });
+        }
+      }
+    });
+
+    return { weight, bonusWeight };
   }
 
-  /**
-   * Розширений парсер грошей, боргів, бонусів та карт
-   */
-  function parseMoneyDebtBonusCard(str) {
+  function parseMoneyDebtBonusCard(str, bonusWeightFromGram = 0) {
     if (!str) return { eurPaid: 0, debtNew: 0, debtRepaid: 0, bonus: 0, card: 0, rawText: '' };
 
     const clean = str.toString().toLowerCase().replace(',', '.').trim();
@@ -85,77 +102,57 @@
     let bonus = 0;
     let card = 0;
 
+    if (bonusWeightFromGram > 0) {
+      bonus += bonusWeightFromGram * 10;
+    }
+
     const tokens = clean.split(/\s+/);
 
-    for (let k = 0; k < tokens.length; k++) {
-      const token = tokens[k];
-
-      // 1. Парсинг Боргу
+    tokens.forEach(token => {
       if (token.includes('долг') || token.includes('борг')) {
-        const numMatch = token.match(/[-+]?\d*\.?\d+/);
-        if (numMatch) {
-          const val = parseFloat(numMatch[0]);
-          if (val < 0) debtNew += Math.abs(val);
-          else if (val > 0) debtRepaid += val;
-        } else if (k + 1 < tokens.length) {
-          const nextVal = parseFloat(tokens[k + 1]);
-          if (!isNaN(nextVal)) {
-            if (nextVal < 0) debtNew += Math.abs(nextVal);
-            else debtRepaid += nextVal;
-            k++;
-          }
+        const hasMinus = token.includes('-');
+        const num = parseFloat(token.replace(/[^0-9.]/g, ''));
+        if (!isNaN(num)) {
+          if (hasMinus) debtNew += num;
+          else debtRepaid += num;
         }
       } 
-      // 2. Парсинг Бонусу
       else if (token.includes('бонус') || token.includes('bonus')) {
-        const numMatch = token.match(/\d*\.?\d+/);
-        if (numMatch) {
-          bonus += parseFloat(numMatch[0]);
-        } else if (k + 1 < tokens.length) {
-          const nextVal = parseFloat(tokens[k + 1]);
-          if (!isNaN(nextVal)) {
-            bonus += nextVal;
-            k++;
-          }
-        }
+        const num = parseFloat(token.replace(/[^0-9.]/g, ''));
+        if (!isNaN(num)) bonus += num;
       } 
-      // 3. Парсинг Карти
       else if (token.includes('карт') || token.includes('card')) {
-        const numMatch = token.match(/\d*\.?\d+/);
-        if (numMatch) {
-          card += parseFloat(numMatch[0]);
-        } else if (k + 1 < tokens.length) {
-          const nextVal = parseFloat(tokens[k + 1]);
-          if (!isNaN(nextVal)) {
-            card += nextVal;
-            k++;
-          }
+        const num = parseFloat(token.replace(/[^0-9.]/g, ''));
+        if (!isNaN(num)) {
+          card += num;
         } else {
-          // Якщо просто написано "карта" без числа після неї, вважаємо всю попередню суму картою
           card = eurPaid;
         }
       } 
-      // 4. Звичайна оплата
       else {
-        const num = parseFloat(token);
-        if (!isNaN(num) && num > 0) {
-          eurPaid += num;
+        const matches = token.match(/[-+]?\d*\.?\d+/g);
+        if (matches) {
+          matches.forEach(m => {
+            const val = parseFloat(m);
+            if (!isNaN(val) && !token.includes('долг')) {
+              eurPaid += val;
+            }
+          });
         }
       }
-    }
+    });
 
-    // Карта зменшує фактично отримані готівкові кошти
     let actualEURPaid = eurPaid;
-    if (card > 0 && card <= eurPaid) {
-      actualEURPaid = eurPaid - card;
-    } else if (card > eurPaid && eurPaid === 0) {
-      // Якщо вказано просто "карта 100"
-      actualEURPaid = 0;
+    if (card > 0) {
+      if (card <= eurPaid) {
+        actualEURPaid = eurPaid - card;
+      } else {
+        actualEURPaid = 0;
+      }
     }
 
     return {
       eurPaid: actualEURPaid,
-      originalEURPaid: eurPaid,
       debtNew,
       debtRepaid,
       bonus,
@@ -223,9 +220,11 @@
         const timeStr = lines[i+3];
 
         if (timeStr.includes('.') || timeStr.includes(':')) {
-          const baseGramm = parseWeight(rawGramm);
+          const weightData = parseWeightAndBonus(rawGramm);
+          const moneyData = parseMoneyDebtBonusCard(rawMoney, weightData.bonusWeight);
+          
+          const baseGramm = weightData.weight;
           const exactGramm = baseGramm * 1.1;
-          const moneyData = parseMoneyDebtBonusCard(rawMoney);
           const parsedDateObj = parseRecordDateTime(timeStr);
 
           records.push({
@@ -236,7 +235,6 @@
             exactGramm,
             rawMoney,
             eurPaid: moneyData.eurPaid,
-            originalEURPaid: moneyData.originalEURPaid,
             debtNew: moneyData.debtNew,
             debtRepaid: moneyData.debtRepaid,
             bonus: moneyData.bonus,
@@ -277,7 +275,6 @@
       totalBaseGramm += r.baseGramm;
       totalExactGramm += r.exactGramm;
 
-      // Якщо є БОНУС -> не зменшує отримано, але додається в "МОЇ" як мінус
       if (r.bonus > 0) {
         autoMyExpensesFromLogs.push({
           id: 'auto_bonus_' + Math.random(),
@@ -288,7 +285,6 @@
         });
       }
 
-      // Якщо є КАРТА -> зменшила фактично отримано, але додається в "МОЇ" як плюс
       if (r.card > 0) {
         autoMyExpensesFromLogs.push({
           id: 'auto_card_' + Math.random(),
@@ -324,7 +320,6 @@
       totalNetProfit += cat.netProfit;
     });
 
-    // Об'єднуємо ручні витрати з автоматичними (Бонус/Карта)
     const combinedMyExpenses = [...myExpenses, ...autoMyExpensesFromLogs];
 
     let myTotalSum = 0;
@@ -669,39 +664,292 @@
   }
 
   function loadSampleData() {
-    const sample = `BANNAN
-Name
-Gramm
+    const sample = `bannan
+name
+gramm
 €
-Time
-01.08.2025
-
-Олексій
-10,0
-100 бонус 10
-14:30
-
-Дмитро
-5.0
-50 карта 20
-15:15
-
-SKITTLES
-Name
-Gramm
+time
+jasmin
+1
+10
+10.8 15:00
+валера слава
+1
+10
+10.8 16:00
+G5zi K8
+2
+20
+10.8 16:00
+Ash Deyveyne
+2
+20
+10.8 17:00
+Rico Matshine
+2
+20
+10.8 16:00
+Terpz
+2
+-20долг
+10.8 21:00
+Danko
+1
+10
+10.8 20:10
+Егор
+4 !1.5бонус
+40 +10долг
+10.8 20:20
+essah711
+3
+-30долг
+11.8 13:00
+G5zi K8
+5.67
+50
+11.8 18:30
+валера слава
+1+2
++10 
+11.8 18:30
+Mark G0ldberg
+1
+10
+11.8 22:40
+Victoria
+1
+10
+12.8 10:10
+Mary Jane
+2 3
+20 30
+12.8 16:30
+Juris
+1
+10
+12.8 20:00
+Barbarik
+1
+10 +10долг
+12.8 20:20
+Karl
+5
+50
+13.8 11:30
+Егор
+2+3
+50
+13.8 16:00
+валера слава
+2.5
+20 -33долг
+13.8 17:00
+Борис
+1
+-50долг
+13.8 17:00
+G5zi K8
+2
+20
+15.8 14:00
+Mary Jane
+2
+20
+15.8 16:40
+валера слава
+1
+10
+16.8 16:0
+Mark G0ldberg
+1
+10
+16.8 19:25
+N
+5
+50
+16.8 20:20
+Jasmin 
+1
+10
+17.8 13:30
+Mary Jane
+3
+30
+17.8 19:10
+Ash Deyveyne 
+1
+10
+17.8 19:10
+Барбарик
+1
+10
+17.8 21:00
+Морти
+!1бонус
+0
+17.8 22:40
+Victoria 
+2
+20
+17.8 23:40
+essah711
+2
+-20долг
+18.8 13:00
+Valentin B
+2
+20
+18.8 18:00
+валера слава
+1.2
+12
+18.8 18:00
+Татьяна
+1
+10
+18.8 18:10
+Alesha Lesha
+2
+20
+18.8 18:20
+Terpz
+2
+-20долг
+18.8 22:30
+валера слава
+2
+16 -4долг
+19.8 18:00
+Фарух
+1
+10
+19.8 18:10
+Humans2.0
+!1бонус
+0
+19.8 18:30
+Джин
+2
+20карта
+19.8 19:30
+Станислав
+2
+20
+19.8 22:20
+Terpz
+2
+20
+20.8 15:00
+Amira
+2
+20
+20.8 16:30
+Victoria 
+2
+20
+21.8 9:40
+Charlie 
+1.5
+15
+21.8 15:30
+essah711
+2
+-20долг
+21.8 15:30
+skittles
+name
+gramm
 €
-Time
-01.08.2025
-
-Іван
-20.0
-200 карта 200
-14:45
-
-Олексій
-15.0
-150 долг -50
-18:20`;
+time
+jasmin
+3
+30
+12.8 9:20
+Ash Deyveyne
+1,5
+15
+13.8 17:55
+Victoria
+2
+20
+13.8 17:45
+Lola
+!0.5бонус
++20долг
+13.8 20:20
+валера слава
+1
+10 +20долг 
+14.8 18:00
+G5zi K8
+2
+20
+14.8 18:00
+jasmin
+1
+10
+14.8 18:00
+Ash Deyveyne
+1
+10
+14.8 20:20
+Mary Jane
+2
+20
+14.8 21:00
+Саня
+1
+-10долг
+14.8 21:00
+A D
+2
+20
+14.8 22:20
+G5zi K8
+2
+20
+15.8 14:00
+валера слава
+1
+10
+15.8 14:00
+Juris
+1
+10
+15.8 14:00
+Морти
+1
+10
+15.8 14:00
+essah711
+3
+-30долг
+15.8 18:00
+Terpz
+5
+50
+15.8 18:00
+Alesha Lesha
+2
+20
+15.8 18:00
+Ash Deyveyne
+2 !0.5бонус
+20
+15.8 22:20
+A D (frau)
+5 !1бонус
+50
+16.8 00:10
+валера слава
+1
+10
+16.8 16:00
+Ash Deyveyne
+1
+10
+19.8 21:40`;
 
     document.getElementById('rawInput').value = sample;
     processData();
