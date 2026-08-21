@@ -1,5 +1,5 @@
 /**
- * Humans 2.0 Engine - Core Application Logic
+ * Humans 2.0 Engine - Core Application Logic (Bonus & Card Support)
  */
 
 (() => {
@@ -23,6 +23,7 @@
   let barChart = null;
   let pieChart = null;
   let myExpenses = [];
+  let autoMyExpensesFromLogs = []; // Автоматичні записи з Бонусів та Карт
   let parsedRecordsGlobal = [];
   let selectedWeekStart = getMonday(new Date());
   const categoryColorMap = {};
@@ -71,45 +72,96 @@
     return matches.reduce((acc, curr) => acc + parseFloat(curr), 0);
   }
 
-  function parseMoneyAndDebt(str) {
-    if (!str) return { eurPaid: 0, debtNew: 0, debtRepaid: 0, rawDebtText: '' };
+  /**
+   * Розширений парсер грошей, боргів, бонусів та карт
+   */
+  function parseMoneyDebtBonusCard(str) {
+    if (!str) return { eurPaid: 0, debtNew: 0, debtRepaid: 0, bonus: 0, card: 0, rawText: '' };
 
     const clean = str.toString().toLowerCase().replace(',', '.').trim();
     let eurPaid = 0;
     let debtNew = 0;
     let debtRepaid = 0;
-    let rawDebtText = '';
+    let bonus = 0;
+    let card = 0;
 
-    if (clean.includes('долг')) {
-      rawDebtText = clean;
-      const tokens = clean.split(/\s+/);
+    const tokens = clean.split(/\s+/);
 
-      tokens.forEach(token => {
-        if (token.includes('долг')) {
-          const numMatch = token.match(/[-+]?\d*\.?\d+/);
-          if (numMatch) {
-            const val = parseFloat(numMatch[0]);
-            if (val < 0) {
-              debtNew += Math.abs(val);
-            } else if (val > 0) {
-              debtRepaid += val;
-            }
-          }
-        } else {
-          const num = parseFloat(token);
-          if (!isNaN(num) && num > 0) {
-            eurPaid += num;
+    for (let k = 0; k < tokens.length; k++) {
+      const token = tokens[k];
+
+      // 1. Парсинг Боргу
+      if (token.includes('долг') || token.includes('борг')) {
+        const numMatch = token.match(/[-+]?\d*\.?\d+/);
+        if (numMatch) {
+          const val = parseFloat(numMatch[0]);
+          if (val < 0) debtNew += Math.abs(val);
+          else if (val > 0) debtRepaid += val;
+        } else if (k + 1 < tokens.length) {
+          const nextVal = parseFloat(tokens[k + 1]);
+          if (!isNaN(nextVal)) {
+            if (nextVal < 0) debtNew += Math.abs(nextVal);
+            else debtRepaid += nextVal;
+            k++;
           }
         }
-      });
-    } else {
-      const matches = clean.match(/\d*\.?\d+/g);
-      if (matches) {
-        eurPaid = matches.reduce((acc, curr) => acc + parseFloat(curr), 0);
+      } 
+      // 2. Парсинг Бонусу
+      else if (token.includes('бонус') || token.includes('bonus')) {
+        const numMatch = token.match(/\d*\.?\d+/);
+        if (numMatch) {
+          bonus += parseFloat(numMatch[0]);
+        } else if (k + 1 < tokens.length) {
+          const nextVal = parseFloat(tokens[k + 1]);
+          if (!isNaN(nextVal)) {
+            bonus += nextVal;
+            k++;
+          }
+        }
+      } 
+      // 3. Парсинг Карти
+      else if (token.includes('карт') || token.includes('card')) {
+        const numMatch = token.match(/\d*\.?\d+/);
+        if (numMatch) {
+          card += parseFloat(numMatch[0]);
+        } else if (k + 1 < tokens.length) {
+          const nextVal = parseFloat(tokens[k + 1]);
+          if (!isNaN(nextVal)) {
+            card += nextVal;
+            k++;
+          }
+        } else {
+          // Якщо просто написано "карта" без числа після неї, вважаємо всю попередню суму картою
+          card = eurPaid;
+        }
+      } 
+      // 4. Звичайна оплата
+      else {
+        const num = parseFloat(token);
+        if (!isNaN(num) && num > 0) {
+          eurPaid += num;
+        }
       }
     }
 
-    return { eurPaid, debtNew, debtRepaid, rawDebtText };
+    // Карта зменшує фактично отримані готівкові кошти
+    let actualEURPaid = eurPaid;
+    if (card > 0 && card <= eurPaid) {
+      actualEURPaid = eurPaid - card;
+    } else if (card > eurPaid && eurPaid === 0) {
+      // Якщо вказано просто "карта 100"
+      actualEURPaid = 0;
+    }
+
+    return {
+      eurPaid: actualEURPaid,
+      originalEURPaid: eurPaid,
+      debtNew,
+      debtRepaid,
+      bonus,
+      card,
+      rawText: clean
+    };
   }
 
   function parseRecordDateTime(timeStr) {
@@ -173,7 +225,7 @@
         if (timeStr.includes('.') || timeStr.includes(':')) {
           const baseGramm = parseWeight(rawGramm);
           const exactGramm = baseGramm * 1.1;
-          const moneyData = parseMoneyAndDebt(rawMoney);
+          const moneyData = parseMoneyDebtBonusCard(rawMoney);
           const parsedDateObj = parseRecordDateTime(timeStr);
 
           records.push({
@@ -184,9 +236,12 @@
             exactGramm,
             rawMoney,
             eurPaid: moneyData.eurPaid,
+            originalEURPaid: moneyData.originalEURPaid,
             debtNew: moneyData.debtNew,
             debtRepaid: moneyData.debtRepaid,
-            rawDebtText: moneyData.rawDebtText,
+            bonus: moneyData.bonus,
+            card: moneyData.card,
+            rawDebtText: moneyData.rawText,
             timeStr,
             parsedDateObj
           });
@@ -207,6 +262,7 @@
     localStorage.setItem('h2_raw_logs', rawText);
 
     parsedRecordsGlobal = parseLogs(rawText);
+    autoMyExpensesFromLogs = [];
 
     let totalEURPaid = 0;
     let totalBaseGramm = 0;
@@ -220,6 +276,28 @@
       totalEURPaid += r.eurPaid;
       totalBaseGramm += r.baseGramm;
       totalExactGramm += r.exactGramm;
+
+      // Якщо є БОНУС -> не зменшує отримано, але додається в "МОЇ" як мінус
+      if (r.bonus > 0) {
+        autoMyExpensesFromLogs.push({
+          id: 'auto_bonus_' + Math.random(),
+          note: `Бонус: ${r.clientName} (${r.category})`,
+          amount: -Math.abs(r.bonus),
+          time: r.timeStr,
+          isAuto: true
+        });
+      }
+
+      // Якщо є КАРТА -> зменшила фактично отримано, але додається в "МОЇ" як плюс
+      if (r.card > 0) {
+        autoMyExpensesFromLogs.push({
+          id: 'auto_card_' + Math.random(),
+          note: `Карта: ${r.clientName} (${r.category})`,
+          amount: Math.abs(r.card),
+          time: r.timeStr,
+          isAuto: true
+        });
+      }
 
       if (r.debtNew > 0) clientNewDebts[r.clientName] = (clientNewDebts[r.clientName] || 0) + r.debtNew;
       if (r.debtRepaid > 0) clientRepaidDebts[r.clientName] = (clientRepaidDebts[r.clientName] || 0) + r.debtRepaid;
@@ -246,14 +324,17 @@
       totalNetProfit += cat.netProfit;
     });
 
+    // Об'єднуємо ручні витрати з автоматичними (Бонус/Карта)
+    const combinedMyExpenses = [...myExpenses, ...autoMyExpensesFromLogs];
+
     let myTotalSum = 0;
-    myExpenses.forEach(item => { myTotalSum += item.amount; });
+    combinedMyExpenses.forEach(item => { myTotalSum += item.amount; });
 
     totalEURPaid += myTotalSum;
     totalNetProfit += myTotalSum;
 
-    if (myExpenses.length > 0) {
-      categories['МОЇ'] = { deals: myExpenses.length, baseGramm: 0, exactGramm: 0, eurPaid: myTotalSum, costOfGoods: 0, netProfit: myTotalSum };
+    if (combinedMyExpenses.length > 0) {
+      categories['МОЇ'] = { deals: combinedMyExpenses.length, baseGramm: 0, exactGramm: 0, eurPaid: myTotalSum, costOfGoods: 0, netProfit: myTotalSum };
     }
 
     let totalActiveDebt = 0;
@@ -275,7 +356,7 @@
     document.getElementById('kpiExactWeight').innerText = `${totalExactGramm.toFixed(2)} г`;
     document.getElementById('kpiDeals').innerText = parsedRecordsGlobal.length;
 
-    renderMyExpensesUI(myTotalSum);
+    renderMyExpensesUI(combinedMyExpenses, myTotalSum);
     renderDebtsList('activeDebtsList', clientActiveDebts, 'text-neonYellow', '-');
     renderDebtsList('repaidDebtsList', clientRepaidDebts, 'text-emerald-400', '+');
     renderCategoryCards(categories);
@@ -285,22 +366,22 @@
   }
 
   // --- RENDERERS ---
-  function renderMyExpensesUI(total) {
+  function renderMyExpensesUI(combinedExpenses, total) {
     document.getElementById('myTotalDisplay').innerText = `${total.toFixed(2)} €`;
     const container = document.getElementById('myExpensesList');
-    if (myExpenses.length === 0) {
+    if (combinedExpenses.length === 0) {
       container.innerHTML = '<p class="text-gray-500 text-[11px]">Записи відсутні</p>';
       return;
     }
-    container.innerHTML = myExpenses.slice().reverse().map(item => `
-      <div class="flex justify-between items-center bg-brandDark/60 p-1.5 rounded-lg border border-brandBorder">
+    container.innerHTML = combinedExpenses.slice().reverse().map(item => `
+      <div class="flex justify-between items-center bg-brandDark/60 p-1.5 rounded-lg border ${item.isAuto ? 'border-neonBlue/40' : 'border-brandBorder'}">
         <div class="truncate pr-2">
           <span class="text-gray-300">${sanitizeHTML(item.note)}</span>
-          <span class="text-[9px] text-gray-500 block">${item.time}</span>
+          <span class="text-[9px] text-gray-500 block">${item.time} ${item.isAuto ? '<span class="text-neonBlue">(Auto)</span>' : ''}</span>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           <span class="font-bold ${item.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}">${item.amount >= 0 ? '+' : ''}${item.amount} €</span>
-          <button data-expense-id="${item.id}" class="btn-remove-expense text-gray-500 hover:text-red-400 font-bold px-1">×</button>
+          ${!item.isAuto ? `<button data-expense-id="${item.id}" class="btn-remove-expense text-gray-500 hover:text-red-400 font-bold px-1">×</button>` : ''}
         </div>
       </div>
     `).join('');
@@ -384,7 +465,7 @@
           <td class="p-3 font-mono text-gray-400">${r.baseGramm.toFixed(2)} г</td>
           <td class="p-3 font-mono font-bold text-neonGreen">${r.exactGramm.toFixed(2)} г</td>
           <td class="p-3 font-mono font-bold text-white">${r.eurPaid.toFixed(2)} €</td>
-          <td class="p-3 font-mono text-[11px] ${r.debtNew > 0 ? 'text-neonYellow' : r.debtRepaid > 0 ? 'text-emerald-400' : 'text-gray-500'}">
+          <td class="p-3 font-mono text-[11px] text-gray-300">
             ${sanitizeHTML(r.rawDebtText) || '-'}
           </td>
           <td class="p-3 font-mono text-gray-400 text-[11px]">${sanitizeHTML(r.timeStr)}</td>
@@ -551,7 +632,8 @@
       id: Date.now(),
       note,
       amount,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isAuto: false
     });
 
     noteInput.value = '';
@@ -596,12 +678,12 @@ Time
 
 Олексій
 10,0
-100
+100 бонус 10
 14:30
 
 Дмитро
 5.0
-50
+50 карта 20
 15:15
 
 SKITTLES
@@ -613,7 +695,7 @@ Time
 
 Іван
 20.0
-200
+200 карта 200
 14:45
 
 Олексій
@@ -634,7 +716,7 @@ Time
     });
   }
 
-  // --- ATTACH EVENT LISTENERS (Clean Events Architecture) ---
+  // --- ATTACH EVENT LISTENERS ---
   function initEvents() {
     document.getElementById('btnLoadSample').addEventListener('click', loadSampleData);
     document.getElementById('btnClearAll').addEventListener('click', clearAllData);
